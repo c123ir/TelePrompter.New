@@ -1,0 +1,142 @@
+/* استفاده از CDN برای فونت‌ها */
+@import url('https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css');
+@import url('https://cdn.jsdelivr.net/gh/rastikerdar/sahel-font@v3.4.0/dist/font-face.css');
+@import url('https://cdn.jsdelivr.net/gh/rastikerdar/samim-font@v4.0.5/dist/font-face.css');
+@import url('https://cdn.jsdelivr.net/gh/rastikerdar/tanha-font@v0.10/dist/font-face.css');
+
+/* تنظیمات استایل‌های اصلی */
+body {
+  margin: 0;
+  font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
+
+/* استایل‌های پایه برای تله‌پرامپتر */
+* {
+  box-sizing: border-box;
+}
+
+/* تنظیمات RTL */
+[dir="rtl"] {
+  text-align: right;
+}
+
+/* استایل‌های عمومی */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 15px;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.full-screen {
+  width: 100%;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* استایل‌های ویژه برای حالت تمام صفحه */
+.teleprompter-fullscreen {
+  background-color: #000;
+  color: #fff;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 9999;
+}
+
+/* انیمیشن چشمک‌زن برای حالت ضبط */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.recording-indicator {
+  animation: blink 2s infinite;
+}
+
+/* استایل‌های پاسخگو برای موبایل */
+@media (max-width: 768px) {
+  .mobile-hidden {
+    display: none !important;
+  }
+  
+  .mobile-only {
+    display: block !important;
+  }
+  
+  /* تنظیم اندازه آیکون‌ها برای موبایل */
+  .MuiSvgIcon-root {
+    font-size: 1.25rem !important;
+  }
+  
+  /* تنظیم اندازه دکمه‌ها برای موبایل */
+  .MuiButton-root {
+    padding: 4px 10px !important;
+    font-size: 0.8rem !important;
+  }
+  
+  /* تنظیم اندازه کارت‌ها و پنل‌ها برای موبایل */
+  .MuiCard-root {
+    margin: 5px 0 !important;
+  }
+  
+  /* تنظیم اندازه متن‌ها برای موبایل */
+  .MuiTypography-h4 {
+    font-size: 1.5rem !important;
+  }
+  
+  .MuiTypography-h5 {
+    font-size: 1.2rem !important;
+  }
+  
+  .MuiTypography-h6 {
+    font-size: 1rem !important;
+  }
+  
+  /* تنظیم فاصله‌ها برای موبایل */
+  .MuiContainer-root {
+    padding: 8px !important;
+  }
+  
+  /* بهبود اندازه دکمه‌های کنترل */
+  .control-button {
+    min-width: 40px !important;
+    height: 40px !important;
+  }
+  
+  /* بهبود صفحه نمایش تله‌پرامپتر برای موبایل */
+  .teleprompter-view {
+    padding: 10px !important;
+  }
+}
+
+/* تنظیمات اختصاصی برای اسکرول در موبایل */
+.mobile-scroll-area {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* استایل‌های اضافه شده برای اسکرول و تله‌پرامپتر */
+.teleprompter-container {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.teleprompter-content {
+  will-change: transform, margin-top;
+}
