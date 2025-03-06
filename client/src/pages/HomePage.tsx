@@ -5,7 +5,7 @@ import { Link as RouterLink } from 'react-router-dom';
 import TeleprompterView from '../components/TeleprompterView';
 import SettingsPanel from '../components/SettingsPanel';
 import ServerStatus from '../components/ServerStatus';
-import { io, Socket } from 'socket.io-client';
+import { createSocketConnection, type Socket } from '../utils/socketUtil';
 import SettingsIcon from '@mui/icons-material/Settings';
 import CloseIcon from '@mui/icons-material/Close';
 import PeopleIcon from '@mui/icons-material/People';
@@ -18,7 +18,7 @@ import StopIcon from '@mui/icons-material/Stop';
 import SpeedIcon from '@mui/icons-material/Speed';
 
 // آدرس سرور Socket.io
-const SOCKET_SERVER = process.env.REACT_APP_SOCKET_SERVER || 'http://localhost:4444';
+const SOCKET_SERVER = process.env.REACT_APP_SERVER_URL || 'http://localhost:4444';
 
 // تعریف تایپ پروژه
 interface Project {
@@ -58,7 +58,7 @@ const HomePage: React.FC = () => {
   
   // وضعیت اتصال
   const [isOnline, setIsOnline] = useState<boolean>(false);
-  const [connectionError, setConnectionError] = useState<string>('');
+  const [connectionError, setConnectionError] = useState<string | null>('');
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 5;
   const [reconnectAttempts, setReconnectAttempts] = useState<number>(0);
@@ -89,129 +89,132 @@ const HomePage: React.FC = () => {
     }
     
     const setupSocketConnection = () => {
-      try {
-        const socketInstance = io(SOCKET_SERVER, {
-          reconnectionAttempts: maxReconnectAttempts,
-          timeout: 10000,
-          transports: ['websocket', 'polling']
-        });
+      if (socket) {
+        socket.disconnect();
+      }
+
+      // ایجاد اتصال جدید به سرور با استفاده از شناسه پروژه انتخاب شده
+      const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:4444';
+      
+      // تنظیمات پیشرفته برای اتصال پایدارتر
+      const newSocket = createSocketConnection(serverUrl, {
+        timeout: 30000, // افزایش مهلت زمانی اتصال به 30 ثانیه
+        reconnectionAttempts: 10, // افزایش تعداد تلاش‌های اتصال مجدد
+        query: {
+          projectId: projectId,
+          role: 'controller'
+        }
+      });
+      
+      newSocket.on('connect', () => {
+        setIsOnline(true);
+        setConnectionTime(new Date());
+        setConnectionError('');
+        setReconnectAttempts(0);
+        console.log('به سرور متصل شدیم');
         
-        socketInstance.on('connect', () => {
-          setIsOnline(true);
-          setConnectionTime(new Date());
-          setConnectionError('');
-          setReconnectAttempts(0);
-          console.log('به سرور متصل شدیم');
-          
-          // پیوستن به پروژه
-          socketInstance.emit('join-project', projectId);
-        });
-        
-        socketInstance.on('connect_error', (error) => {
-          console.error('خطا در اتصال به سرور:', error);
-          setConnectionError(`خطا در اتصال به سرور: ${error.message}`);
-          setIsOnline(false);
-          setOpenSnackbar(true);
-          
-          // افزایش تعداد تلاش‌های اتصال مجدد
-          setReconnectAttempts(prev => prev + 1);
-        });
-        
-        socketInstance.on('disconnect', (reason) => {
-          setIsOnline(false);
-          setOpenSnackbar(true);
-          showSnackbar('اتصال به سرور قطع شد', 'error');
-          console.log('ارتباط با سرور قطع شد:', reason);
-        });
-        
-        // دریافت اطلاعات پروژه
-        socketInstance.on('project-data', (projectData: Project) => {
-          setProject(projectData);
-          setLoading(false);
-          showSnackbar(`پروژه "${projectData.name}" بارگذاری شد`, 'success');
-        });
-        
-        // به‌روزرسانی تنظیمات پروژه
-        socketInstance.on('project-settings-updated', (data: { projectId: string, settings: Partial<Project> }) => {
-          if (data.projectId === projectId) {
-            setProject(prev => {
-              if (!prev) return null;
-              return { ...prev, ...data.settings };
-            });
-          }
-        });
-        
-        // دریافت متن به‌روز شده
-        socketInstance.on('text-updated', (data: { projectId: string, text: string }) => {
-          if (data.projectId === projectId) {
-            setProject(prev => {
-              if (!prev) return null;
-              return { ...prev, text: data.text };
-            });
-          }
-        });
-        
-        // وقتی اسکرول شروع می‌شود
-        socketInstance.on('scrolling-started', (id: string) => {
-          if (id === projectId) {
-            setProject(prev => {
-              if (!prev) return null;
-              return { ...prev, isScrolling: true };
-            });
-            showSnackbar('اسکرول متن شروع شد', 'info');
-          }
-        });
-        
-        // وقتی اسکرول متوقف می‌شود
-        socketInstance.on('scrolling-stopped', (id: string) => {
-          if (id === projectId) {
-            setProject(prev => {
-              if (!prev) return null;
-              return { ...prev, isScrolling: false };
-            });
-            showSnackbar('اسکرول متن متوقف شد', 'info');
-          }
-        });
-        
-        // پیوستن کاربر جدید
-        socketInstance.on('client-joined', (data: { projectId: string, clientId: string }) => {
-          if (data.projectId === projectId) {
-            showSnackbar('کاربر جدیدی به پروژه پیوست', 'info');
-          }
-        });
-        
-        // خروج کاربر
-        socketInstance.on('client-left', (data: { projectId: string, clientId: string }) => {
-          if (data.projectId === projectId) {
-            showSnackbar('یکی از کاربران پروژه را ترک کرد', 'info');
-          }
-        });
-        
-        // دریافت تعداد اتصالات
-        socketInstance.on('connection-count', (count: number) => {
-          setActiveConnections(count);
-        });
-        
-        // دریافت پینگ
-        socketInstance.on('pong', (ms: number) => {
-          setLastPingTime(ms);
-        });
-        
-        // دریافت خطا
-        socketInstance.on('error', (errorData: any) => {
-          console.error('خطای دریافتی از سرور:', errorData);
-          showSnackbar(errorData.message || 'خطایی رخ داد', 'error');
-        });
-        
-        setSocket(socketInstance);
-        return socketInstance;
-      } catch (error) {
-        console.error('خطا در ایجاد اتصال به سرور:', error);
-        setConnectionError('خطا در ایجاد اتصال به سرور');
+        // پیوستن به پروژه
+        newSocket.emit('join-project', projectId);
+      });
+      
+      newSocket.on('connect_error', (error) => {
+        console.error('خطا در اتصال به سرور:', error);
+        setConnectionError(`خطا در اتصال به سرور: ${error.message}`);
         setIsOnline(false);
         setOpenSnackbar(true);
-        return null;
-      }
+        
+        // افزایش تعداد تلاش‌های اتصال مجدد
+        setReconnectAttempts(prev => prev + 1);
+      });
+      
+      newSocket.on('disconnect', (reason) => {
+        setIsOnline(false);
+        setOpenSnackbar(true);
+        showSnackbar('اتصال به سرور قطع شد', 'error');
+        console.log('ارتباط با سرور قطع شد:', reason);
+      });
+      
+      // دریافت اطلاعات پروژه
+      newSocket.on('project-data', (projectData: Project) => {
+        setProject(projectData);
+        setLoading(false);
+        showSnackbar(`پروژه "${projectData.name}" بارگذاری شد`, 'success');
+      });
+      
+      // به‌روزرسانی تنظیمات پروژه
+      newSocket.on('project-settings-updated', (data: { projectId: string, settings: Partial<Project> }) => {
+        if (data.projectId === projectId) {
+          setProject(prev => {
+            if (!prev) return null;
+            return { ...prev, ...data.settings };
+          });
+        }
+      });
+      
+      // دریافت متن به‌روز شده
+      newSocket.on('text-updated', (data: { projectId: string, text: string }) => {
+        if (data.projectId === projectId) {
+          setProject(prev => {
+            if (!prev) return null;
+            return { ...prev, text: data.text };
+          });
+        }
+      });
+      
+      // وقتی اسکرول شروع می‌شود
+      newSocket.on('scrolling-started', (id: string) => {
+        if (id === projectId) {
+          setProject(prev => {
+            if (!prev) return null;
+            return { ...prev, isScrolling: true };
+          });
+          showSnackbar('اسکرول متن شروع شد', 'info');
+        }
+      });
+      
+      // وقتی اسکرول متوقف می‌شود
+      newSocket.on('scrolling-stopped', (id: string) => {
+        if (id === projectId) {
+          setProject(prev => {
+            if (!prev) return null;
+            return { ...prev, isScrolling: false };
+          });
+          showSnackbar('اسکرول متن متوقف شد', 'info');
+        }
+      });
+      
+      // پیوستن کاربر جدید
+      newSocket.on('client-joined', (data: { projectId: string, clientId: string }) => {
+        if (data.projectId === projectId) {
+          showSnackbar('کاربر جدیدی به پروژه پیوست', 'info');
+        }
+      });
+      
+      // خروج کاربر
+      newSocket.on('client-left', (data: { projectId: string, clientId: string }) => {
+        if (data.projectId === projectId) {
+          showSnackbar('یکی از کاربران پروژه را ترک کرد', 'info');
+        }
+      });
+      
+      // دریافت تعداد اتصالات
+      newSocket.on('connection-count', (count: number) => {
+        setActiveConnections(count);
+      });
+      
+      // دریافت پینگ
+      newSocket.on('pong', (ms: number) => {
+        setLastPingTime(ms);
+      });
+      
+      // دریافت خطا
+      newSocket.on('error', (errorData: any) => {
+        console.error('خطای دریافتی از سرور:', errorData);
+        showSnackbar(errorData.message || 'خطایی رخ داد', 'error');
+      });
+      
+      setSocket(newSocket);
+      return newSocket;
     };
     
     // ایجاد اتصال به سرور
@@ -482,7 +485,7 @@ const HomePage: React.FC = () => {
             activeConnections={activeConnections}
             serverUrl={SOCKET_SERVER}
             reconnect={handleReconnect}
-            connectionError={connectionError}
+            connectionError={connectionError === null ? undefined : connectionError}
             reconnectAttempts={reconnectAttempts}
             maxReconnectAttempts={maxReconnectAttempts}
             lastPingTime={lastPingTime}

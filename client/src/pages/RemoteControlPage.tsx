@@ -41,12 +41,12 @@ import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft';
 import DesktopWindowsIcon from '@mui/icons-material/DesktopWindows';
 import FlipIcon from '@mui/icons-material/Flip';
 import FormatLineSpacingIcon from '@mui/icons-material/FormatLineSpacing';
-import { io, Socket } from 'socket.io-client';
+import { createSocketConnection, type Socket } from '../utils/socketUtil';
 // وارد کردن تنظیمات سرور از فایل پیکربندی
 import getServerUrl, { socketConfig } from '../config/serverConfig';
 
 // آدرس سرور Socket.io
-const SOCKET_SERVER = process.env.REACT_APP_SOCKET_SERVER || 'http://localhost:4444';
+const SOCKET_SERVER = process.env.REACT_APP_SERVER_URL || 'http://localhost:4444';
 
 // تعریف تایپ پروژه
 interface Project {
@@ -113,7 +113,7 @@ const RemoteControlPage: React.FC = () => {
   // وضعیت اتصال
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(false);
-  const [connectionError, setConnectionError] = useState<string>('');
+  const [connectionError, setConnectionError] = useState<string | null>('');
   const [connectedViewers, setConnectedViewers] = useState<number>(0);
   
   // وضعیت پیام‌ها
@@ -154,38 +154,17 @@ const RemoteControlPage: React.FC = () => {
           setSocket(null);
         }
         
-        console.log('در حال اتصال به سرور...');
-        // استفاده از تابع getServerUrl برای دریافت آدرس سرور
-        const serverUrl = getServerUrl();
-        console.log('آدرس سرور برای اتصال:', serverUrl);
+        console.log('تلاش برای اتصال به سرور:', SOCKET_SERVER);
         
-        // افزودن اطلاعات بیشتر برای اشکال‌زدایی
-        const socketOpts = {
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
-          reconnectionDelayMax: 5000,
-          timeout: 20000,
-          autoConnect: true,
-          transports: ['websocket', 'polling'] as string[],
-          upgrade: true,
-          forceNew: true,
-          multiplex: false,
+        // ایجاد اتصال سوکت با تنظیمات بهبود یافته
+        const socketInstance = createSocketConnection(SOCKET_SERVER, {
+          timeout: 30000, // افزایش مهلت زمانی اتصال به 30 ثانیه
+          reconnectionAttempts: 10, // افزایش تعداد تلاش‌های اتصال مجدد
           query: {
-            role: 'remote', // نقش این دستگاه: کنترل از راه دور
-            projectId: projectId || '',
-            clientInfo: JSON.stringify({
-              userAgent: navigator.userAgent,
-              resolution: `${window.innerWidth}x${window.innerHeight}`,
-              timestamp: new Date().toISOString()
-            })
+            projectId,
+            role: 'remote-control'
           }
-        };
-        
-        console.log('تنظیمات سوکت:', socketOpts);
-        
-        // ایجاد اتصال Socket.io با تنظیمات پیشرفته
-        const socketInstance = io(serverUrl, socketOpts);
+        });
         setSocket(socketInstance);
         
         if (process.env.REACT_APP_DEBUG_SOCKET === 'true') {
@@ -195,7 +174,7 @@ const RemoteControlPage: React.FC = () => {
         
         socketInstance.on('connect', () => {
           console.log('به سرور متصل شدیم با آیدی:', socketInstance.id);
-          console.log('آدرس سرور:', serverUrl);
+          console.log('آدرس سرور:', SOCKET_SERVER);
           setIsOnline(true);
           setConnectionError('');
           

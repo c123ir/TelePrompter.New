@@ -34,13 +34,13 @@ import EditIcon from '@mui/icons-material/Edit';
 import TimerIcon from '@mui/icons-material/Timer';
 import FormatSizeIcon from '@mui/icons-material/FormatSize';
 import AutoStoriesIcon from '@mui/icons-material/AutoStories';
-import io, { Socket } from 'socket.io-client';
-import { getTextStats } from '../utils/textUtils';
+import { createSocketConnection, type Socket } from '../utils/socketUtil';
 import SettingsIcon from '@mui/icons-material/Settings';
 import BugReportIcon from '@mui/icons-material/BugReport';
+import { getTextStats } from '../utils/textUtils';
 
 // آدرس سرور Socket.io
-const SOCKET_SERVER = process.env.REACT_APP_SOCKET_SERVER || 'http://localhost:4444';
+const SOCKET_SERVER = process.env.REACT_APP_SERVER_URL || 'http://localhost:4444';
 
 // تعریف نوع داده پروژه
 interface Project {
@@ -89,10 +89,9 @@ const ProjectSelectionPage: React.FC = () => {
   // اتصال به سرور و دریافت لیست پروژه‌ها
   useEffect(() => {
     // اتصال به سرور Socket.io
-    const newSocket = io(SOCKET_SERVER, {
-      reconnectionAttempts: 5,
-      timeout: 10000,
-      transports: ['websocket', 'polling']
+    const newSocket = createSocketConnection(SOCKET_SERVER, {
+      timeout: 30000, // افزایش مهلت زمانی اتصال به 30 ثانیه
+      reconnectionAttempts: 10 // افزایش تعداد تلاش‌های اتصال مجدد
     });
     
     newSocket.on('connect', () => {

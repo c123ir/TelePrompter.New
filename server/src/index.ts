@@ -5,6 +5,7 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import os from 'os';
 import { Project, ProjectManager } from './models/Project';
+import { logger } from './models/Logger';
 
 // بارگذاری متغیرهای محیطی
 dotenv.config();
@@ -45,6 +46,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(express.json()); // اضافه کردن پارسر JSON برای بدنه درخواست‌ها
 
 // کلاس مدیریت اتصالات
 class ConnectionManager {
@@ -88,25 +90,61 @@ class ConnectionManager {
   }
 }
 
-// ایجاد مدیر اتصالات
+// ایجاد نمونه از کلاس مدیریت اتصالات
 const connectionManager = new ConnectionManager();
 
-// تنظیم مسیرهای API
-
-// دریافت لیست پروژه‌ها
-app.get('/api/projects', (req, res) => {
-  const projects = projectManager.getAllProjects();
-  res.json(projects);
+// ایجاد سرور HTTP و Socket.IO
+const httpServer = http.createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
 });
 
-// دریافت اطلاعات یک پروژه
-app.get('/api/projects/:id', (req, res) => {
-  const project = projectManager.getProject(req.params.id);
-  if (project) {
-    res.json(project);
-  } else {
-    res.status(404).json({ error: 'پروژه یافت نشد' });
-  }
+// مسیرهای API برای سیستم خطایابی
+app.get('/api/logs', (req, res) => {
+  logger.info('درخواست دریافت لاگ‌ها از سرور', 'API');
+  res.json({ logs: logger.getAllLogs() });
+});
+
+app.get('/api/diagnostics', (req, res) => {
+  logger.info('درخواست اطلاعات خطایابی سیستم', 'API');
+  
+  // جمع‌آوری اطلاعات سیستم
+  const systemInfo = logger.getSystemInfo();
+  
+  // جمع‌آوری اطلاعات اتصالات
+  const connectionInfo = connectionManager.getConnectionInfo();
+  
+  // جمع‌آوری اطلاعات پروژه‌ها
+  const projectsCount = projectManager.getAllProjects().length;
+  
+  // آمار دیگر
+  const stats = {
+    uptime: process.uptime(),
+    memoryUsage: process.memoryUsage(),
+    cpuUsage: process.cpuUsage()
+  };
+  
+  res.json({
+    systemInfo,
+    connectionInfo,
+    projectsCount,
+    stats,
+    environment: {
+      nodeEnv: process.env.NODE_ENV,
+      port: PORT,
+      host: HOST,
+      clientUrl: CLIENT_URL
+    }
+  });
+});
+
+app.post('/api/logs/clear', (req, res) => {
+  logger.clearLogs();
+  logger.info('لاگ‌های سرور پاک شدند', 'API');
+  res.json({ success: true, message: 'لاگ‌ها با موفقیت پاک شدند' });
 });
 
 // تنظیم صفحه شاخص
@@ -253,24 +291,6 @@ app.get('/api/status', (req, res) => {
   });
 });
 
-// ایجاد سرور HTTP و Socket.IO
-const httpServer = http.createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    // استفاده از همان تنظیمات CORS برای Socket.IO
-    origin: corsOptions.origin,
-    methods: corsOptions.methods,
-    credentials: true,
-    allowedHeaders: corsOptions.allowedHeaders
-  },
-  // افزایش مدت زمان انتظار برای اتصال
-  pingTimeout: 60000,
-  pingInterval: 25000,
-  // تنظیمات اضافی
-  transports: ['websocket', 'polling'],
-  allowEIO3: true
-});
-
 // مدیریت خطاهای سراسری
 process.on('uncaughtException', (error) => {
   console.error('خطای مدیریت نشده:', error);
@@ -316,6 +336,35 @@ io.on('connection', (socket) => {
   
   // ارسال لیست پروژه‌ها به کلاینت جدید
   socket.emit('projects-list', projectManager.getAllProjects());
+
+  // درخواست لیست کاربران متصل
+  socket.on('get-connected-users', () => {
+    console.log(`کاربر ${socket.id} درخواست لیست کاربران متصل را دارد`);
+    
+    // ایجاد لیست کاربران متصل با اطلاعات مورد نیاز
+    const connectedUsers = Array.from(connectionManager.getConnectionInfo().connectionIds).map((socketId, index) => {
+      // پیدا کردن پروژه‌ای که کاربر به آن متصل است
+      const connectedProject = projectManager.findProjectByClientId(socketId);
+      
+      // دریافت سوکت کاربر
+      const userSocket = connectionManager.getSocket(socketId);
+      const role = userSocket?.data?.role || userSocket?.handshake?.query?.role || 'unknown';
+      
+      // بازگرداندن اطلاعات کاربر با کلید منحصر به فرد
+      return {
+        socketId: socketId,
+        role: role,
+        projectId: connectedProject?.id,
+        connectionTime: new Date().toISOString(),
+        clientInfo: userSocket?.handshake?.query?.clientInfo || ''
+      };
+    });
+    
+    // ارسال لیست کاربران به کلاینت درخواست کننده
+    socket.emit('users-list', connectedUsers);
+    
+    console.log(`لیست ${connectedUsers.length} کاربر متصل برای کاربر ${socket.id} ارسال شد`);
+  });
 
   // درخواست ایجاد پروژه جدید
   socket.on('create-project', (data: { name: string, text: string }) => {
@@ -736,12 +785,10 @@ httpServer.on('error', (error) => {
 
 // شروع سرور
 httpServer.listen(Number(PORT), HOST, () => {
+  console.log(`سرور در آدرس http://${HOST}:${PORT} در حال اجراست`);
+  // نمایش آدرس IP شبکه برای دسترسی از دستگاه‌های دیگر
   const localIp = getLocalIpAddress();
-  console.log(`سرور Socket.IO در حال اجرا روی پورت ${PORT} و آدرس ${HOST}`);
-  console.log(`آدرس محلی: http://localhost:${PORT}`);
-  console.log(`آدرس شبکه: http://${localIp}:${PORT}`);
-  console.log(`\nبرای دسترسی از موبایل، از آدرس‌های زیر استفاده کنید:`);
-  console.log(`- سرور: http://${localIp}:${PORT}`);
-  console.log(`- کلاینت: http://${localIp}:3333`);
-  console.log(`\nبرای اتصال به کلاینت، این آدرس را در مرورگر موبایل وارد کنید: http://${localIp}:3333`);
+  if (localIp) {
+    console.log(`آدرس شبکه داخلی: http://${localIp}:${PORT}`);
+  }
 }); 

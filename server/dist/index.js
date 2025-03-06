@@ -10,6 +10,7 @@ const cors_1 = __importDefault(require("cors"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const os_1 = __importDefault(require("os"));
 const Project_1 = require("./models/Project");
+const Logger_1 = require("./models/Logger");
 // بارگذاری متغیرهای محیطی
 dotenv_1.default.config();
 // تنظیمات پورت
@@ -25,11 +26,25 @@ demoProject.text = 'این یک متن نمونه برای تست تله‌پر�
 console.log(`پروژه نمونه با آیدی ${demoProject.id} ایجاد شد`);
 // راه‌اندازی اکسپرس
 const app = (0, express_1.default)();
-app.use((0, cors_1.default)({
-    origin: '*',
-    methods: ['GET', 'POST'],
+// پیکربندی CORS با تنظیمات دقیق‌تر
+const corsOptions = {
+    origin: [
+        'http://localhost:3333',
+        'http://127.0.0.1:3333',
+        CLIENT_URL,
+        // اضافه کردن آدرس‌های دیگر برای دسترسی از شبکه
+        /^http:\/\/192\.168\.\d+\.\d+:3333$/,
+        /^http:\/\/10\.\d+\.\d+\.\d+:3333$/,
+        /^http:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+:3333$/,
+        // برای ویژگی پرادکشن، اما ناامن برای محیط واقعی تولید
+        '*'
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
     credentials: true
-}));
+};
+app.use((0, cors_1.default)(corsOptions));
+app.use(express_1.default.json()); // اضافه کردن پارسر JSON برای بدنه درخواست‌ها
 // کلاس مدیریت اتصالات
 class ConnectionManager {
     connections = new Map();
@@ -81,6 +96,43 @@ app.get('/api/projects/:id', (req, res) => {
     else {
         res.status(404).json({ error: 'پروژه یافت نشد' });
     }
+});
+// مسیرهای API برای سیستم خطایابی
+app.get('/api/logs', (req, res) => {
+    Logger_1.logger.info('درخواست دریافت لاگ‌ها از سرور', 'API');
+    res.json({ logs: Logger_1.logger.getAllLogs() });
+});
+app.get('/api/diagnostics', (req, res) => {
+    Logger_1.logger.info('درخواست اطلاعات خطایابی سیستم', 'API');
+    // جمع‌آوری اطلاعات سیستم
+    const systemInfo = Logger_1.logger.getSystemInfo();
+    // جمع‌آوری اطلاعات اتصالات
+    const connectionInfo = connectionManager.getConnectionInfo();
+    // جمع‌آوری اطلاعات پروژه‌ها
+    const projectsCount = projectManager.getProjects().length;
+    // آمار دیگر
+    const stats = {
+        uptime: process.uptime(),
+        memoryUsage: process.memoryUsage(),
+        cpuUsage: process.cpuUsage()
+    };
+    res.json({
+        systemInfo,
+        connectionInfo,
+        projectsCount,
+        stats,
+        environment: {
+            nodeEnv: process.env.NODE_ENV,
+            port: PORT,
+            host: HOST,
+            clientUrl: CLIENT_URL
+        }
+    });
+});
+app.post('/api/logs/clear', (req, res) => {
+    Logger_1.logger.clearLogs();
+    Logger_1.logger.info('لاگ‌های سرور پاک شدند', 'API');
+    res.json({ success: true, message: 'لاگ‌ها با موفقیت پاک شدند' });
 });
 // تنظیم صفحه شاخص
 app.get('/', (req, res) => {
@@ -228,14 +280,18 @@ app.get('/api/status', (req, res) => {
 const httpServer = http_1.default.createServer(app);
 const io = new socket_io_1.Server(httpServer, {
     cors: {
-        origin: "*", // اجازه دسترسی از هر منبعی
-        methods: ["GET", "POST"],
+        // استفاده از همان تنظیمات CORS برای Socket.IO
+        origin: corsOptions.origin,
+        methods: corsOptions.methods,
         credentials: true,
-        allowedHeaders: ["my-custom-header"]
+        allowedHeaders: corsOptions.allowedHeaders
     },
     // افزایش مدت زمان انتظار برای اتصال
     pingTimeout: 60000,
-    pingInterval: 25000
+    pingInterval: 25000,
+    // تنظیمات اضافی
+    transports: ['websocket', 'polling'],
+    allowEIO3: true
 });
 // مدیریت خطاهای سراسری
 process.on('uncaughtException', (error) => {

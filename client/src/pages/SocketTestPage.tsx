@@ -24,7 +24,7 @@ import {
   Select,
   MenuItem
 } from '@mui/material';
-import { io, Socket } from 'socket.io-client';
+import { createSocketConnection, type Socket } from '../utils/socketUtil';
 import { getServerUrl } from '../config/serverConfig';
 import { socketConfig } from '../config/socketConfig';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -141,7 +141,7 @@ const SocketTestPage: React.FC = () => {
       addLog('تنظیمات سوکت:', 'info', undefined, socketOpts);
       
       // ایجاد اتصال جدید
-      const socket = io(url || 'http://localhost:4444', socketOpts);
+      const socket = createSocketConnection(url || 'http://localhost:4444', socketOpts);
       socketRef.current = socket;
       
       // رویدادهای سوکت

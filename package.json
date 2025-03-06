@@ -22,5 +22,11 @@
   "license": "ISC",
   "devDependencies": {
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@types/socket.io": "^3.0.1",
+    "@types/socket.io-client": "^1.4.36",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
   }
 }

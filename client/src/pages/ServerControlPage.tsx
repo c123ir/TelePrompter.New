@@ -30,7 +30,7 @@ import {
   FormControl,
   Slider
 } from '@mui/material';
-import { io, Socket } from 'socket.io-client';
+import { createSocketConnection, type Socket } from '../utils/socketUtil';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -45,7 +45,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import BarChartIcon from '@mui/icons-material/BarChart';
 
 // آدرس سرور Socket.io
-const SOCKET_SERVER = process.env.REACT_APP_SOCKET_SERVER || 'http://localhost:4444';
+const SOCKET_SERVER = process.env.REACT_APP_SERVER_URL || 'http://localhost:4444';
 
 // تعریف تایپ پروژه
 interface Project {
@@ -116,7 +116,7 @@ const ServerControlPage: React.FC = () => {
   // وضعیت اتصال
   const [socket, setSocket] = useState<Socket | null>(null);
   const [isOnline, setIsOnline] = useState<boolean>(false);
-  const [connectionError, setConnectionError] = useState<string>('');
+  const [connectionError, setConnectionError] = useState<string | null>('');
   const [activeClients, setActiveClients] = useState<ConnectedClient[]>([]);
   
   // وضعیت دیالوگ
@@ -144,11 +144,7 @@ const ServerControlPage: React.FC = () => {
   useEffect(() => {
     const connectToServer = () => {
       try {
-        const socketInstance = io(SOCKET_SERVER, {
-          reconnectionAttempts: 5,
-          timeout: 10000,
-          transports: ['websocket', 'polling']
-        });
+        const socketInstance = createSocketConnection(SOCKET_SERVER);
         
         socketInstance.on('connect', () => {
           setIsOnline(true);

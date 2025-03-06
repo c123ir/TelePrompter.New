@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
 import { Alert, Snackbar } from '@mui/material';
+import { createSocketConnection, type Socket } from '../utils/socketUtil';
 
 interface SocketConnectionManagerProps {
   serverUrl: string;
@@ -32,14 +32,8 @@ const SocketConnectionManager: React.FC<SocketConnectionManagerProps> = ({
   useEffect(() => {
     console.log('تلاش برای اتصال به سرور:', serverUrl);
     
-    // انجام اتصال به سرور
-    const socket = io(serverUrl, {
-      transports: ['websocket', 'polling'], // ابتدا وب‌سوکت را امتحان کند، سپس به polling برگردد
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      timeout: 10000,
-      autoConnect: true
-    });
+    // انجام اتصال به سرور با استفاده از ابزار سوکت
+    const socket = createSocketConnection(serverUrl);
     
     // رویدادهای اتصال
     socket.on('connect', () => {
@@ -64,7 +58,7 @@ const SocketConnectionManager: React.FC<SocketConnectionManagerProps> = ({
       if (onError) onError(err);
     });
     
-    socket.on('disconnect', (reason) => {
+    socket.on('disconnect', (reason: string) => {
       console.log('اتصال به سرور قطع شد. دلیل:', reason);
       setIsConnected(false);
       if (onDisconnect) onDisconnect();

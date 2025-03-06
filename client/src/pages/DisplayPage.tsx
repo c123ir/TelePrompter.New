@@ -10,12 +10,12 @@ import {
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import HomeIcon from '@mui/icons-material/Home';
-import { io, Socket } from 'socket.io-client';
+import { createSocketConnection, type Socket } from '../utils/socketUtil';
 // وارد کردن تنظیمات سرور از فایل پیکربندی
 import getServerUrl, { socketConfig } from '../config/serverConfig';
 
 // آدرس سرور Socket.io
-const SOCKET_SERVER = process.env.REACT_APP_SOCKET_SERVER || 'http://localhost:4444';
+const SOCKET_SERVER = process.env.REACT_APP_SERVER_URL || 'http://localhost:4444';
 
 // تعریف تایپ پروژه
 interface Project {
@@ -56,8 +56,9 @@ const DisplayPage: React.FC = () => {
   
   // وضعیت اتصال
   const [socket, setSocket] = useState<Socket | null>(null);
+  const [connected, setConnected] = useState<boolean>(false);
   const [isOnline, setIsOnline] = useState<boolean>(false);
-  const [connectionError, setConnectionError] = useState<string>('');
+  const [connectionError, setConnectionError] = useState<string | null>('');
   
   // وضعیت پیام‌ها
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false);
@@ -208,99 +209,32 @@ const DisplayPage: React.FC = () => {
     
     const connectToServer = () => {
       try {
-        // بررسی وجود و قطع اتصال قبلی
-        if (socketRef.current && socketRef.current.connected) {
-          console.log('قطع اتصال قبلی از سرور...');
-          socketRef.current.disconnect();
-          socketRef.current = null;
-        }
+        console.log("تلاش برای اتصال به سرور...");
+        const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:4444';
         
-        console.log('در حال اتصال به سرور...');
-        // استفاده از تابع getServerUrl برای دریافت آدرس سرور
-        const serverUrl = getServerUrl();
-        console.log('آدرس سرور برای اتصال:', serverUrl);
-        
-        // افزودن اطلاعات بیشتر برای اشکال‌زدایی
-        const socketOpts = {
-          reconnection: true,
-          reconnectionAttempts: 5,
-          reconnectionDelay: 1000,
-          reconnectionDelayMax: 5000,
-          timeout: 20000,
-          autoConnect: true,
-          transports: ['websocket', 'polling'] as string[],
-          upgrade: true,
-          forceNew: true,
-          multiplex: false,
+        // تنظیمات پیشرفته برای اتصال پایدارتر
+        const socketInstance = createSocketConnection(serverUrl, {
+          timeout: 30000, // افزایش مهلت زمانی اتصال به 30 ثانیه
+          reconnectionAttempts: 10, // افزایش تعداد تلاش‌های اتصال مجدد
           query: {
-            role: 'display', // نقش این دستگاه: نمایشگر
-            projectId: projectId || '',
-            clientInfo: JSON.stringify({
-              userAgent: navigator.userAgent,
-              resolution: `${window.innerWidth}x${window.innerHeight}`,
-              timestamp: new Date().toISOString()
-            })
-          }
-        };
-        
-        console.log('تنظیمات سوکت:', socketOpts);
-        
-        // ایجاد اتصال Socket.io با تنظیمات پیشرفته
-        const socket = io(serverUrl, socketOpts);
-        socketRef.current = socket;
-        socketInstance = socket;
-        
-        if (process.env.REACT_APP_DEBUG_SOCKET === 'true') {
-          console.log('حالت اشکال‌زدایی سوکت فعال است.');
-          (window as any).debugSocket = socket;
-        }
-        
-        // وقتی به سرور متصل شدیم
-        socket.on('connect', () => {
-          console.log('به سرور متصل شدیم با آیدی:', socket.id);
-          console.log('آدرس سوکت سرور:', serverUrl);
-          setIsOnline(true);
-          setConnectionError('');
-          
-          // اعلام حضور در پروژه
-          if (socket && projectId) {
-            const joinData = {
-              projectId: projectId,
-              role: 'display'
-            };
-            
-            console.log('داده‌های ارسالی به سرور برای پیوستن:', joinData);
-            socket.emit('join-project', joinData, (response: any) => {
-              if (response && response.success) {
-                console.log('با موفقیت به پروژه پیوستیم. پاسخ:', response);
-              } else {
-                console.error('خطا در پیوستن به پروژه:', response);
-                showSnackbar('خطا در پیوستن به پروژه', 'error');
-              }
-            });
-            
-            // درخواست اطلاعات پروژه
-            const getProjectData = { projectId };
-            console.log('درخواست اطلاعات پروژه:', getProjectData);
-            socket.emit('get-project', getProjectData, (response: any) => {
-              if (response && !response.error) {
-                console.log('اطلاعات پروژه دریافت شد:', response);
-                setProject(response);
-                showSnackbar(`پروژه "${response.name}" بارگذاری شد`, 'success');
-                
-                // تنظیم وضعیت اسکرول
-                if (response.isScrolling) {
-                  startScrolling();
-                }
-              } else {
-                console.error('خطا در دریافت اطلاعات پروژه:', response);
-                showSnackbar('خطا در دریافت اطلاعات پروژه', 'error');
-              }
-            });
+            projectId,
+            role: 'display'
           }
         });
         
-        socket.on('connect_error', (error) => {
+        socketInstance.on('connect', () => {
+          console.log("به سرور متصل شدیم");
+          setIsOnline(true);
+          setConnectionError(null);
+          
+          // پیوستن به اتاق پروژه با نقش نمایش‌دهنده
+          socketInstance.emit('join-project', { projectId, role: 'display' });
+          
+          // درخواست اطلاعات پروژه
+          socketInstance.emit('get-project', projectId);
+        });
+        
+        socketInstance.on('connect_error', (error: Error) => {
           console.error('خطا در اتصال به سرور:', error);
           setConnectionError(`خطا در اتصال به سرور: ${error.message}`);
           setIsOnline(false);
@@ -308,7 +242,7 @@ const DisplayPage: React.FC = () => {
           showSnackbar(`خطا در اتصال به سرور: ${error.message}`, 'error');
         });
         
-        socket.on('disconnect', (reason) => {
+        socketInstance.on('disconnect', (reason: string) => {
           setIsOnline(false);
           setOpenSnackbar(true);
           showSnackbar('اتصال به سرور قطع شد', 'error');
@@ -319,7 +253,7 @@ const DisplayPage: React.FC = () => {
         });
         
         // به‌روزرسانی تنظیمات پروژه
-        socket.on('project-settings-updated', (data: { projectId: string, settings: Partial<Project> }) => {
+        socketInstance.on('project-settings-updated', (data: { projectId: string, settings: Partial<Project> }) => {
           if (data.projectId === projectId) {
             setProject(prev => {
               if (!prev) return null;
@@ -340,7 +274,7 @@ const DisplayPage: React.FC = () => {
         });
         
         // دریافت متن به‌روز شده
-        socket.on('text-updated', (data: { projectId: string, text: string }) => {
+        socketInstance.on('text-updated', (data: { projectId: string, text: string }) => {
           if (data.projectId === projectId) {
             setProject(prev => {
               if (!prev) return null;
@@ -350,7 +284,7 @@ const DisplayPage: React.FC = () => {
         });
         
         // تنظیم موقعیت اسکرول
-        socket.on('set-scroll-position', (data: { projectId: string, position: number }) => {
+        socketInstance.on('set-scroll-position', (data: { projectId: string, position: number }) => {
           if (data.projectId === projectId) {
             setScrollPosition(data.position);
             setProject(prev => {
@@ -361,7 +295,7 @@ const DisplayPage: React.FC = () => {
         });
         
         // وقتی اسکرول شروع می‌شود
-        socket.on('scrolling-started', (id: string) => {
+        socketInstance.on('scrolling-started', (id: string) => {
           if (id === projectId) {
             setProject(prev => {
               if (!prev) return null;
@@ -372,7 +306,7 @@ const DisplayPage: React.FC = () => {
         });
         
         // وقتی اسکرول متوقف می‌شود
-        socket.on('scrolling-stopped', (id: string) => {
+        socketInstance.on('scrolling-stopped', (id: string) => {
           if (id === projectId) {
             setProject(prev => {
               if (!prev) return null;
@@ -383,7 +317,7 @@ const DisplayPage: React.FC = () => {
         });
         
         // در حال شمارش معکوس
-        socket.on('countdown-started', (data: { projectId: string, seconds: number }) => {
+        socketInstance.on('countdown-started', (data: { projectId: string, seconds: number }) => {
           if (data.projectId === projectId) {
             setIsCountingDown(true);
             setCountdownValue(data.seconds);
@@ -391,14 +325,14 @@ const DisplayPage: React.FC = () => {
         });
         
         // پایان شمارش معکوس
-        socket.on('countdown-finished', (id: string) => {
+        socketInstance.on('countdown-finished', (id: string) => {
           if (id === projectId) {
             setIsCountingDown(false);
           }
         });
         
         // دریافت خطا
-        socket.on('error', (errorData: any) => {
+        socketInstance.on('error', (errorData: any) => {
           console.error('خطای دریافتی از سرور:', errorData);
           
           // بررسی نوع داده خطا و نمایش پیام مناسب
@@ -429,7 +363,7 @@ const DisplayPage: React.FC = () => {
         });
         
         // پاسخ پینگ از سرور
-        socket.on('pong', (latency: number) => {
+        socketInstance.on('pong', (latency: number) => {
           console.log('پاسخ پونگ از سرور دریافت شد. تاخیر:', Date.now() - latency, 'میلی‌ثانیه');
         });
         
