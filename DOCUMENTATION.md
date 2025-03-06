@@ -104,4 +104,35 @@ function App() {
 این پروژه توسط تیم توسعه تله‌پرامپتر طراحی و پیاده‌سازی شده است.
 
 ## لایسنس
-تمامی حقوق این پروژه محفوظ است. 
+تمامی حقوق این پروژه محفوظ است.
+
+### Smart Assistant Integration
+The application includes a smart assistant that helps developers manage tasks, bugs, and ideas directly within the development environment. The assistant provides features like:
+- Task management with priority levels
+- Screenshot capture and annotation
+- Code snippet storage
+- Quick access via keyboard shortcuts
+- Local storage for data persistence
+
+### AI Capabilities and Future Roadmap
+The smart assistant is designed to evolve with advanced AI capabilities:
+
+1. **Intelligent Task Analysis**:
+   - Pattern recognition for similar issues
+   - Automated task prioritization
+   - Smart task categorization
+
+2. **Context Preservation**:
+   - Maintaining development context across sessions
+   - Learning from previous decisions
+   - Smart suggestions based on historical data
+
+3. **Development Phases**:
+   - Phase 1: Core functionality with localStorage (Current)
+   - Phase 2: Advanced features with Node.js microservice
+   - Phase 3: AI integration and complete system unification
+
+4. **Technical Challenges and Solutions**:
+   - Performance: Web Workers for background processing
+   - Integration: Modular design with Observer pattern
+   - Storage: IndexedDB for local storage with server sync 
