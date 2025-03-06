@@ -6,6 +6,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { TaskType, TaskPriority, TaskStatus, Screenshot } from './types';
 import { LocalStorageTaskOrchestrator } from './taskOrchestratorCore';
+import TaskManagementPanel from './TaskManagementPanel';
 
 // استایل‌های درون‌خطی برای دستیار
 const styles = {
@@ -267,7 +268,7 @@ const styles = {
 };
 
 // نوع نمای فعال
-type ActiveView = 'tasks' | 'screenshots';
+type ActiveView = 'tasks' | 'screenshots' | 'advanced';
 
 /**
  * کامپوننت دستیار هوشمند شناور
@@ -296,11 +297,39 @@ const FloatingAssistant: React.FC = () => {
   
   // بارگیری تسک‌ها
   const loadTasks = useCallback(async () => {
+    if (isOpen) {
+      try {
+        const tasksData = await orchestrator.taskManager.getTasksByPriority();
+        setTasks(tasksData);
+      } catch (error) {
+        console.error('خطا در بارگیری تسک‌ها:', error);
+      }
+    }
+  }, [isOpen, orchestrator.taskManager]);
+  
+  // به‌روزرسانی تسک
+  const handleTaskUpdate = useCallback(async (taskId: string, updates: Partial<Task>) => {
     try {
-      const allTasks = await orchestrator.taskManager.getTasksByPriority();
-      setTasks(allTasks);
+      await orchestrator.taskManager.updateTask(taskId, updates);
+      await loadTasks(); // بارگیری مجدد تسک‌ها
     } catch (error) {
-      console.error('خطا در بارگیری تسک‌ها:', error);
+      console.error('خطا در به‌روزرسانی تسک:', error);
+    }
+  }, [orchestrator.taskManager, loadTasks]);
+  
+  // حذف تسک
+  const handleTaskDelete = useCallback(async (taskId: string) => {
+    try {
+      // تأیید از کاربر قبل از حذف
+      if (window.confirm('آیا از حذف این تسک اطمینان دارید؟')) {
+        // اینجا کد حذف تسک را اضافه کنید - در فاز 1 متد حذف تسک موجود نیست
+        // در آینده: await orchestrator.taskManager.deleteTask(taskId);
+        
+        // فعلاً به صورت موقت تسک را از استیت حذف می‌کنیم
+        setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
+      }
+    } catch (error) {
+      console.error('خطا در حذف تسک:', error);
     }
   }, [orchestrator.taskManager]);
   
@@ -452,6 +481,14 @@ const FloatingAssistant: React.FC = () => {
   // نمایش محتوا بر اساس نمای فعال
   const renderContent = () => {
     switch (activeView) {
+      case 'advanced':
+        return (
+          <TaskManagementPanel 
+            tasks={tasks}
+            onTaskUpdate={handleTaskUpdate}
+            onTaskDelete={handleTaskDelete}
+          />
+        );
       case 'tasks':
         return (
           <>
@@ -607,9 +644,9 @@ const FloatingAssistant: React.FC = () => {
             </button>
           </div>
           
-          {/* منوی نوع نما */}
-          <div style={styles.menuTabs}>
-            <div 
+          {/* منوی تب‌ها */}
+          <div style={styles.tabMenu}>
+            <button
               style={{
                 ...styles.menuTab,
                 ...(activeView === 'tasks' ? styles.activeMenuTab : {})
@@ -617,8 +654,8 @@ const FloatingAssistant: React.FC = () => {
               onClick={() => setActiveView('tasks')}
             >
               تسک‌ها
-            </div>
-            <div 
+            </button>
+            <button
               style={{
                 ...styles.menuTab,
                 ...(activeView === 'screenshots' ? styles.activeMenuTab : {})
@@ -626,7 +663,16 @@ const FloatingAssistant: React.FC = () => {
               onClick={() => setActiveView('screenshots')}
             >
               اسکرین‌شات‌ها
-            </div>
+            </button>
+            <button
+              style={{
+                ...styles.menuTab,
+                ...(activeView === 'advanced' ? styles.activeMenuTab : {})
+              }}
+              onClick={() => setActiveView('advanced')}
+            >
+              مدیریت پیشرفته
+            </button>
           </div>
           
           {/* محتوا */}
